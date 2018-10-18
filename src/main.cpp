@@ -98,8 +98,14 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+		  Eigen::VectorXd coffes = polyfit(ptsx,ptsy,3);
+		  double cte = polyeval(coffes,px) - py;
+		  double epsi = psi - atan(3*coeffs[3]*px*px + 2*coeffs[2]*px + coeffs[1]);
+		  Eigen::VectorXd staet0(6);
+		  state0 << px,py,psi,v,cte,epsi;   
+		  std::vector<double> result = mpc.Solve(state0,coeffs); 
+          double steer_value = result[0]/deg2rad(25);
+          double throttle_value = result[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
