@@ -11,7 +11,6 @@
 
 // for convenience
 using json = nlohmann::json;
-
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -91,18 +90,53 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+		  double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
+		  double delay = 100/1000;  //100ms delay
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-		  Eigen::VectorXd coffes = polyfit(ptsx,ptsy,3);
-		  double cte = polyeval(coffes,px) - py;
-		  double epsi = psi - atan(3*coeffs[3]*px*px + 2*coeffs[2]*px + coeffs[1]);
-		  Eigen::VectorXd staet0(6);
-		  state0 << px,py,psi,v,cte,epsi;   
+			// Preprocessing.
+          // Transforms waypoints coordinates to the cars coordinates.
+		  vector<double> waypoints_x;
+          vector<double> waypoints_y;
+
+		  for (int i = 0; i < ptsx.size(); i++) {
+				  double dx = ptsx[i] - px;
+				  double dy = ptsy[i] - py;
+				  waypoints_x.push_back(dx * cos(-psi) - dy * sin(-psi));
+				  waypoints_y.push_back(dx * sin(-psi) + dy * cos(-psi));
+		  }
+		  double* ptrx = &waypoints_x[0];
+          double* ptry = &waypoints_y[0];
+          Eigen::Map<Eigen::VectorXd> waypoints_x_eig(ptrx, 6);
+          Eigen::Map<Eigen::VectorXd> waypoints_y_eig(ptry, 6);
+	
+		  Eigen::VectorXd coeffs = polyfit(waypoints_x_eig,waypoints_y_eig,3);
+
+          //init state0
+		  double x0 = 0;
+          double y0 = 0;
+		  double psi0 = 0;
+		  double cte0 = polyeval(coeffs, 0);  // px = 0, py = 0
+          double epsi0 = -atan(coeffs[1]);  // psi = 0
+
+		  //use bicycle mode
+		  //psi = 0
+		  double delay_x = x0 + ( v * cos(psi0) * delay);
+		  double delay_y = y0 + ( v * sin(psi0) * delay);
+          double delay_psi = psi0 - ( v * delta * delay / 2.67 );
+		  double delay_v = v + a * delay;
+		  double cte_delay = cte0 + ( v * sin(epsi0) * delay );
+          double epsi_delay = epsi0 - ( v * atan(coeffs[1]) * delay / 2.67 );
+		  			 
+		  Eigen::VectorXd state0(6);
+		  state0 << delay_x,delay_y,delay_psi,delay_v,cte_delay,epsi_delay;
+
 		  std::vector<double> result = mpc.Solve(state0,coeffs); 
           double steer_value = result[0]/deg2rad(25);
           double throttle_value = result[1];
